@@ -3,7 +3,7 @@ Sketch that implements interface with [HX711 24-Bit ADC module](https://cdn.spar
 
 The modules runs on 2.6 - 5.5 volts.
 
-Change the gain with on line 20:
+Change the gain with on line 16:
 
 ```
 //  Table 3 Input Channel and Gain Selection

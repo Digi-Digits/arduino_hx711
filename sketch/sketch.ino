@@ -1,9 +1,3 @@
-/*
-NOTES:
-messages a processed in process_serial
-actions for each message are in the mainloop
-*/
-
 #define PIN2  (1<<2)
 #define PIN3  (1<<3)
 #define SCK_HIGH() PORTD |= PIN2  // OR with port d
@@ -21,6 +15,8 @@ const uint8_t hx711_gain = 1;
 uint32_t force_value;      // Raw sensor value
 uint8_t data[4] = { 0 };  // shift in buffer
 
+// Lowpass filter the values
+float alpha = 0.02;
 uint32_t smoothed = 0;
 
 ////////// HX711 ////////////
@@ -34,15 +30,15 @@ void setup_hx711() {
 uint8_t read_hx711_byte() {
   // Each PD_SCK pulse shifts out one bit, starting with
   // the MSB bit first, until all 24 bits are shifted out.
-  uint8_t force_value = 0;
+  uint8_t shift_in_byte = 0;
   for (uint8_t i = 8; i > 0; i--) {
     SCK_HIGH();
     delayMicroseconds(1);
-    force_value |= DT_READ() << i;
+    shift_in_byte |= DT_READ() << i;
     SCK_LOW();
     delayMicroseconds(1);
   }
-  return force_value;
+  return shift_in_byte;
 }
 
 bool read_hx711() {
@@ -73,14 +69,11 @@ bool read_hx711() {
   return true;
 }
 
-
 ///////// main ////////////
 void setup() {
-  Serial.begin(BAUD_RATE);   // For debugging
+  Serial.begin(BAUD_RATE);
   setup_hx711();
 }
-
-float alpha = 0.02;
 
 void loop() {
   // Check for new force reading
