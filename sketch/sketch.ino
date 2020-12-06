@@ -13,11 +13,7 @@
 //  2     32      80mV
 const uint8_t hx711_gain = 1;
 uint32_t force_value;      // Raw sensor value
-uint8_t data[4] = { 0 };  // shift in buffer
-
-// Lowpass filter the values
-float alpha = 0.02;
-uint32_t smoothed = 0;
+uint32_t raw_adc_value;    // Shift in buffer
 
 ////////// HX711 ////////////
 void setup_hx711() {
@@ -27,30 +23,24 @@ void setup_hx711() {
   PORTD |= PIN3;  // Set pin D3 pull up resistor high
 }
 
-uint8_t read_hx711_byte() {
-  // Each PD_SCK pulse shifts out one bit, starting with
-  // the MSB bit first, until all 24 bits are shifted out.
-  uint8_t shift_in_byte = 0;
-  for (uint8_t i = 8; i > 0; i--) {
-    SCK_HIGH();
-    delayMicroseconds(1);
-    shift_in_byte |= DT_READ() << i;
-    SCK_LOW();
-    delayMicroseconds(1);
-  }
-  return shift_in_byte;
-}
-
 bool read_hx711() {
   // DT goes LOW when data is ready
   if ( DT_READ() ) {
     return false;
   }
-  force_value = 0;      // Clear
-  cli();          // Stop interrupts
-  data[2] = read_hx711_byte();
-  data[1] = read_hx711_byte();
-  data[0] = read_hx711_byte();
+  raw_adc_value = 0;      // Clear
+  
+  // Each PD_SCK pulse shifts out one bit, starting with
+  // the MSB bit first, until all 24 bits are shifted out.
+  for (uint8_t i = 0; i < 24; i++) {
+    SCK_HIGH();
+    delayMicroseconds(1);
+    raw_adc_value = raw_adc_value << 1;
+    raw_adc_value |= DT_READ();
+    SCK_LOW();
+    delayMicroseconds(1);
+  }
+
   // Set the channel and the gain factor for the next reading using the clock pin.
   for (uint8_t i = 0; i < hx711_gain; i++) {
     SCK_HIGH();
@@ -58,14 +48,16 @@ bool read_hx711() {
     SCK_LOW();
     delayMicroseconds(1);
   }
-  uint8_t padding = 0x00;
-  if (data[2] & 0x80) {
-    padding = 0xFF;
+
+  // FIX THIS. Overflow handling.
+  // Max 80 00 00
+  // Min 7F FF FF
+  if ( raw_adc_value & 0x00800000 ){
+    raw_adc_value |= 0xFF000000;
   }
-  data[3] = padding;
-  // cast the array as a pointer to long and dereference it
-  force_value = *( (uint32_t *) data );
-  sei();          // Allow interrupts
+  
+  force_value = raw_adc_value;
+    
   return true;
 }
 
@@ -78,8 +70,15 @@ void setup() {
 void loop() {
   // Check for new force reading
   if ( read_hx711() ) {
-    smoothed = (1-alpha)*smoothed + alpha*force_value;
     Serial.print(force_value);
-    Serial.print("\n");
+
+//    Serial.print("\t");
+//    uint8_t* structPtr = (uint8_t*) &raw_adc_value;
+//    for (uint8_t i = 0; i < sizeof(raw_adc_value); i++) {
+//      Serial.print(*structPtr++, HEX);
+//      Serial.print(" ");
+//    }
+
+    Serial.println("");
   }
 }
